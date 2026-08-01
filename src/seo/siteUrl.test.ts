@@ -4,6 +4,8 @@ import {
   buildRobotsTxt,
   buildSitemapXml,
   normalizeSiteUrl,
+  resolveViteBase,
+  routerBasenameFromViteBase,
 } from './siteUrl';
 
 describe('normalizeSiteUrl', () => {
@@ -16,6 +18,25 @@ describe('normalizeSiteUrl', () => {
   it('strips trailing slashes', () => {
     expect(normalizeSiteUrl('https://quill.example/')).toBe('https://quill.example');
     expect(normalizeSiteUrl('https://quill.example///')).toBe('https://quill.example');
+  });
+});
+
+describe('resolveViteBase', () => {
+  it('defaults to root', () => {
+    expect(resolveViteBase({})).toBe('/');
+  });
+
+  it('uses explicit VITE_BASE', () => {
+    expect(resolveViteBase({ baseEnv: 'hivequill' })).toBe('/hivequill/');
+    expect(resolveViteBase({ baseEnv: '/hivequill' })).toBe('/hivequill/');
+  });
+
+  it('derives from GitHub Pages project URL', () => {
+    expect(resolveViteBase({ siteUrl: 'https://hiveuprss.github.io/hivequill' })).toBe(
+      '/hivequill/',
+    );
+    expect(routerBasenameFromViteBase('/hivequill/')).toBe('/hivequill');
+    expect(routerBasenameFromViteBase('/')).toBeUndefined();
   });
 });
 

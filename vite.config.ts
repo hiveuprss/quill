@@ -3,7 +3,7 @@ import path from 'node:path';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import { buildRobotsTxt, buildSitemapXml, normalizeSiteUrl } from './src/seo/siteUrl';
+import { buildRobotsTxt, buildSitemapXml, normalizeSiteUrl, resolveViteBase } from './src/seo/siteUrl';
 
 const PORT = 5188;
 
@@ -77,8 +77,13 @@ export default defineConfig(({ command, mode }) => {
   const csp = buildCsp(dev);
   const env = loadEnv(mode, process.cwd(), '');
   const siteUrl = normalizeSiteUrl(env.VITE_SITE_URL || process.env.VITE_SITE_URL);
+  const base = resolveViteBase({
+    siteUrl,
+    baseEnv: env.VITE_BASE || process.env.VITE_BASE,
+  });
 
   return {
+    base,
     plugins: [
       react(),
       VitePWA({
@@ -91,7 +96,8 @@ export default defineConfig(({ command, mode }) => {
           theme_color: '#1a1f1c',
           background_color: '#f4f0e6',
           display: 'standalone',
-          start_url: '/',
+          start_url: './',
+          scope: './',
           icons: [
             {
               src: 'icons/icon-192.png',
@@ -112,7 +118,7 @@ export default defineConfig(({ command, mode }) => {
           ],
         },
         workbox: {
-          navigateFallback: '/index.html',
+          navigateFallback: 'index.html',
           globPatterns: ['**/*.{js,css,html,ico,svg,png,woff2,xml,txt,webmanifest}'],
           runtimeCaching: [],
         },

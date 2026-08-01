@@ -23,7 +23,9 @@ See [DOCKER.md](DOCKER.md).
 docker compose run --rm app npm run build
 ```
 
-Set `VITE_SITE_URL` (no trailing slash) for production OG tags and `sitemap.xml` / `robots.txt`. Defaults to `https://example.com` — see `.env.example`.
+Set `VITE_SITE_URL` (no trailing slash) for production OG tags and `sitemap.xml` / `robots.txt`.  
+Default local placeholder is `https://example.com`. GitHub Pages builds use  
+`https://hiveuprss.github.io/hivequill` (see `.env.example` and the deploy workflow).
 
 ## Tests / CI (Docker)
 
@@ -46,9 +48,12 @@ docker compose run --rm app npm run test:parity
 
 ## Production checklist
 
-1. Set `VITE_SITE_URL` to the public HTTPS origin (no trailing slash) before `npm run build`.
-2. Serve `dist/` over **HTTPS** (required for PWA / secure context).
+1. Production host is **GitHub Pages**: https://hiveuprss.github.io/hivequill/  
+   (`VITE_SITE_URL` + `VITE_BASE=/hivequill/` set in `.github/workflows/deploy-pages.yml`).
+2. Serve over **HTTPS** (GitHub Pages enforces this).
 3. Confirm service worker updates (`registerType: autoUpdate` via `vite-plugin-pwa`).
 4. Keep CSP compatible with Hive APIs + `images.hive.blog` (see `vite.config.ts`).
 5. Smoke: enroll → compose → publish (dry) → install-to-homescreen icons.
 6. Never commit `.env` or real WIFs — tests use disposable `PrivateKey.fromSeed` only.
+
+Deploys automatically on push to `main` (Actions → Deploy to GitHub Pages).
