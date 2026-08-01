@@ -27,15 +27,13 @@ describe('resolveViteBase', () => {
   });
 
   it('uses explicit VITE_BASE', () => {
-    expect(resolveViteBase({ baseEnv: 'hivequill' })).toBe('/hivequill/');
-    expect(resolveViteBase({ baseEnv: '/hivequill' })).toBe('/hivequill/');
+    expect(resolveViteBase({ baseEnv: 'quill' })).toBe('/quill/');
+    expect(resolveViteBase({ baseEnv: '/quill' })).toBe('/quill/');
   });
 
   it('derives from GitHub Pages project URL', () => {
-    expect(resolveViteBase({ siteUrl: 'https://hiveuprss.github.io/hivequill' })).toBe(
-      '/hivequill/',
-    );
-    expect(routerBasenameFromViteBase('/hivequill/')).toBe('/hivequill');
+    expect(resolveViteBase({ siteUrl: 'https://hiveuprss.github.io/quill' })).toBe('/quill/');
+    expect(routerBasenameFromViteBase('/quill/')).toBe('/quill');
     expect(routerBasenameFromViteBase('/')).toBeUndefined();
   });
 });

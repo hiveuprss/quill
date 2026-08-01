@@ -24,10 +24,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # macOS-generated lockfiles can omit Linux optional Rollup natives
+      - run: npm install --no-save @rollup/rollup-linux-x64-gnu
       - name: Build
         env:
-          VITE_SITE_URL: https://hiveuprss.github.io/hivequill
-          VITE_BASE: /hivequill/
+          VITE_SITE_URL: https://hiveuprss.github.io/quill
+          VITE_BASE: /quill/
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

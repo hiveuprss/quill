@@ -25,7 +25,7 @@ docker compose run --rm app npm run build
 
 Set `VITE_SITE_URL` (no trailing slash) for production OG tags and `sitemap.xml` / `robots.txt`.  
 Default local placeholder is `https://example.com`. GitHub Pages builds use  
-`https://hiveuprss.github.io/hivequill` (see `.env.example` and the deploy workflow).
+`https://hiveuprss.github.io/quill` (see `.env.example` and the deploy workflow).
 
 ## Tests / CI (Docker)
 
@@ -48,8 +48,8 @@ docker compose run --rm app npm run test:parity
 
 ## Production checklist
 
-1. Production host is **GitHub Pages**: https://hiveuprss.github.io/hivequill/  
-   (`VITE_SITE_URL` + `VITE_BASE=/hivequill/` set in `.github/workflows/deploy-pages.yml`).
+1. Production host is **GitHub Pages**: https://hiveuprss.github.io/quill/  
+   (`VITE_SITE_URL` + `VITE_BASE=/quill/` set in `.github/workflows/deploy-pages.yml`).
 2. Serve over **HTTPS** (GitHub Pages enforces this).
 3. Confirm service worker updates (`registerType: autoUpdate` via `vite-plugin-pwa`).
 4. Keep CSP compatible with Hive APIs + `images.hive.blog` (see `vite.config.ts`).
