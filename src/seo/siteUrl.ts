@@ -36,6 +36,13 @@ export function routerBasenameFromViteBase(viteBase: string): string | undefined
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 
+/** Join a `public/` asset with Vite `base` (e.g. `/logo.svg` → `/quill/logo.svg`). */
+export function publicAssetUrl(assetPath: string, viteBase = '/'): string {
+  const base = viteBase.endsWith('/') ? viteBase : `${viteBase}/`;
+  const path = assetPath.replace(/^\//, '');
+  return `${base}${path}`;
+}
+
 export function buildSitemapXml(siteUrl: string): string {
   const loc = `${normalizeSiteUrl(siteUrl)}/`;
   return `<?xml version="1.0" encoding="UTF-8"?>

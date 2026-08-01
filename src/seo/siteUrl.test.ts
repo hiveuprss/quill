@@ -4,6 +4,7 @@ import {
   buildRobotsTxt,
   buildSitemapXml,
   normalizeSiteUrl,
+  publicAssetUrl,
   resolveViteBase,
   routerBasenameFromViteBase,
 } from './siteUrl';
@@ -35,6 +36,15 @@ describe('resolveViteBase', () => {
     expect(resolveViteBase({ siteUrl: 'https://hiveuprss.github.io/quill' })).toBe('/quill/');
     expect(routerBasenameFromViteBase('/quill/')).toBe('/quill');
     expect(routerBasenameFromViteBase('/')).toBeUndefined();
+  });
+});
+
+describe('publicAssetUrl', () => {
+  it('prefixes Vite base for subdirectory hosts', () => {
+    expect(publicAssetUrl('logo.svg')).toBe('/logo.svg');
+    expect(publicAssetUrl('/logo.svg', '/')).toBe('/logo.svg');
+    expect(publicAssetUrl('logo.svg', '/quill/')).toBe('/quill/logo.svg');
+    expect(publicAssetUrl('/logo.svg', '/quill')).toBe('/quill/logo.svg');
   });
 });
 

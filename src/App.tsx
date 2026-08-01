@@ -16,6 +16,7 @@ import {
 } from './db/draftsDb';
 import { signingClient } from './crypto/signingClient';
 import { getSettings } from './db/draftsDb';
+import { publicAssetUrl } from './seo/siteUrl';
 
 function ComposeRoute(props: {
   enrolled: boolean;
@@ -108,7 +109,13 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <Link to="/" className="brand" aria-label={t('nav.brandAria')}>
-          <img className="brand-mark" src="/logo.svg" alt="" width={28} height={28} />
+          <img
+            className="brand-mark"
+            src={publicAssetUrl('logo.svg', import.meta.env.BASE_URL)}
+            alt=""
+            width={28}
+            height={28}
+          />
           <span className="brand-text">{t('common.quill')}</span>
         </Link>
         <ConnectivityPill state={conn} />
