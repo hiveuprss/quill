@@ -20,10 +20,14 @@ export function localizeError(message: string, t: TFunction): string {
     'Key mismatch in envelope.': 'errors.keyMismatch',
     'Incorrect passphrase.': 'errors.incorrectPassphrase',
     'Only comment and comment_options operations are allowed.': 'errors.opsAllowlist',
+    'Operation author does not match the enrolled account.': 'errors.opsAuthorMismatch',
+    'comment_options permlink must match the comment.': 'errors.opsPermlinkMismatch',
     'Passphrase confirmation failed.': 'errors.passphraseConfirmFailed',
     'API nodes disagree on your key status — publish blocked for safety.':
       'errors.nodesDisagree',
     'Could not verify key rotation status.': 'errors.rotationVerifyFailed',
+    'Two independent Hive nodes report this posting key is no longer authorised. Publishing is blocked. Your encrypted key has been kept — remove it in Settings once you have confirmed the rotation.':
+      'errors.keyRotatedRetained',
     'Unlock required before upload.': 'errors.unlockRequiredUpload',
     'Upload must follow a user file-picker gesture.': 'errors.uploadGesture',
     'Upload rate limited — wait a moment.': 'errors.uploadRateLimited',

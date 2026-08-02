@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadEnvelope, saveEnvelope, wipeEnvelope, type CredentialEnvelope } from './vaultDb';
+import { loadEnvelope, saveEnvelope, wipeEnvelope, markEnvelopeStale, type CredentialEnvelope } from './vaultDb';
 
 const envelope: CredentialEnvelope = {
   v: 1,
@@ -23,5 +23,14 @@ describe('vaultDb', () => {
     expect(await loadEnvelope()).toEqual(envelope);
     await wipeEnvelope();
     expect(await loadEnvelope()).toBeNull();
+  });
+
+  it('markEnvelopeStale keeps ciphertext', async () => {
+    await saveEnvelope(envelope);
+    await markEnvelopeStale('rotated');
+    const loaded = await loadEnvelope();
+    expect(loaded?.stale).toBe(true);
+    expect(loaded?.staleReason).toBe('rotated');
+    expect(loaded?.ciphertext).toBe(envelope.ciphertext);
   });
 });

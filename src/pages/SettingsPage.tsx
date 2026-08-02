@@ -15,11 +15,13 @@ export function SettingsPage({
   enrolled,
   username,
   postingPubkey,
+  vaultStale = false,
   onStatusChange,
 }: {
   enrolled: boolean;
   username: string | null;
   postingPubkey: string | null;
+  vaultStale?: boolean;
   onStatusChange: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -171,6 +173,11 @@ export function SettingsPage({
         <h2>{t('settings.vault')}</h2>
         {enrolled ? (
           <>
+            {vaultStale ? (
+              <div className="banner danger" role="alert">
+                {t('settings.vaultStale')}
+              </div>
+            ) : null}
             <p className="settings-meta">
               {t('settings.enrolledAs', { username })}
               {postingPubkey ? (

@@ -1,4 +1,4 @@
-/** Worker-only IndexedDB for credential envelope. Never opened from main thread. */
+/** IndexedDB for credential envelope (origin-scoped; readable from the page). */
 
 export type CredentialEnvelope = {
   v: 1;
@@ -9,6 +9,10 @@ export type CredentialEnvelope = {
   ciphertext: string;
   kdf: { name: 'pbkdf2'; hash: 'SHA-256'; iterations: number };
   createdAt: number;
+  /** Set when multi-node rotation check reports key no longer authorised — do not auto-delete. */
+  stale?: boolean;
+  staleReason?: string;
+  staleAt?: number;
 };
 
 const DB_NAME = 'hivequill_vault';
@@ -63,5 +67,17 @@ export async function wipeEnvelope(): Promise<void> {
     tx.objectStore(STORE).delete('primary');
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+  });
+}
+
+/** Keep ciphertext; flag so publish stays blocked until the user wipes in Settings. */
+export async function markEnvelopeStale(reason: string): Promise<void> {
+  const envelope = await loadEnvelope();
+  if (!envelope) return;
+  await saveEnvelope({
+    ...envelope,
+    stale: true,
+    staleReason: reason,
+    staleAt: Date.now(),
   });
 }

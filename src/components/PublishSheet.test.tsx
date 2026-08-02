@@ -193,7 +193,7 @@ describe('PublishSheet', () => {
     verifyRotation.mockResolvedValueOnce('mismatch');
     rerender(<PublishSheet {...baseProps} />);
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => expect(screen.getByText(/rotated on-chain/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/no longer authorised|kept — wipe/i)).toBeInTheDocument());
   });
 
   it('updates tags via form', async () => {

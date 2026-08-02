@@ -2,8 +2,8 @@
 import { Buffer } from 'buffer';
 import { Client, PrivateKey } from '@hiveio/dhive';
 import { deriveAesKey, randomBytes, bufToBase64, base64ToBuf, PBKDF2_ITERATIONS } from './kdf';
-import { loadEnvelope, saveEnvelope, wipeEnvelope, type CredentialEnvelope } from './vaultDb';
-import { validateOpsAllowlist } from '../hive/ops';
+import { loadEnvelope, saveEnvelope, wipeEnvelope, markEnvelopeStale, type CredentialEnvelope } from './vaultDb';
+import { validateOps } from '../hive/ops';
 
 const workerGlobal = globalThis as typeof globalThis & {
   Buffer?: typeof Buffer;
@@ -62,6 +62,30 @@ function client(): HiveClient {
 
 export function __setClientFactoryForTests(factory: (() => HiveClient) | null): void {
   clientFactory = factory ?? (() => new Client(NODES, { timeout: 8_000 }) as unknown as HiveClient);
+}
+
+type GetAccountsFromNode = (
+  node: string,
+  username: string,
+) => Promise<Record<string, unknown> | null>;
+
+async function defaultGetAccountsFromNode(
+  node: string,
+  username: string,
+): Promise<Record<string, unknown> | null> {
+  const c = new Client([node], { timeout: 8_000 }) as unknown as HiveClient;
+  const accounts = (await c.database.getAccounts([username])) as unknown as Record<
+    string,
+    unknown
+  >[];
+  return accounts[0] ?? null;
+}
+
+let getAccountsFromNode: GetAccountsFromNode = defaultGetAccountsFromNode;
+
+/** Test hook: multi-node rotation must hit distinct hosts, not a shared Client pool. */
+export function __setGetAccountsFromNodeForTests(fn: GetAccountsFromNode | null): void {
+  getAccountsFromNode = fn ?? defaultGetAccountsFromNode;
 }
 
 type MessageSink = (data: Record<string, unknown>) => void;
@@ -218,32 +242,46 @@ async function handleUnlock(msg: Extract<WorkerRequest, { type: 'unlock' }>) {
 
 async function rotationCheck(username: string, storedPubkey: string) {
   const pubs: string[][] = [];
-  for (let i = 0; i < 2; i++) {
+  for (const node of NODES.slice(0, 2)) {
     try {
-      const accounts = (await client().database.getAccounts([username])) as unknown as Record<
-        string,
-        unknown
-      >[];
-      pubs.push(keyAuths(accounts[0] ?? {}, 'posting'));
+      const account = await getAccountsFromNode(node, username);
+      pubs.push(keyAuths(account ?? {}, 'posting'));
     } catch {
       pubs.push([]);
     }
   }
-  if (!pubs[0].length && !pubs[1].length) return 'fail' as const;
-  const a = pubs[0].slice().sort().join(',');
-  const b = pubs[1].slice().sort().join(',');
-  if (pubs[0].length && pubs[1].length && a !== b) return 'disagree' as const;
-  const posting = pubs[0].length ? pubs[0] : pubs[1];
-  return posting.includes(storedPubkey) ? ('match' as const) : ('mismatch' as const);
+  const [a, b] = pubs;
+  // Need two successful samples — a single hostile/failing node must not decide mismatch.
+  if (!a.length || !b.length) return 'fail' as const;
+  const aKey = a.slice().sort().join(',');
+  const bKey = b.slice().sort().join(',');
+  if (aKey !== bKey) return 'disagree' as const;
+  return a.includes(storedPubkey) ? ('match' as const) : ('mismatch' as const);
 }
+
+const ROTATION_MISMATCH_MSG =
+  'Two independent Hive nodes report this posting key is no longer authorised. Publishing is blocked. Your encrypted key has been kept — remove it in Settings once you have confirmed the rotation.';
 
 async function handleSignBroadcast(msg: Extract<WorkerRequest, { type: 'signBroadcast' }>) {
   assertNotLocked();
-  if (!validateOpsAllowlist(msg.ops)) {
-    throw new Error('Only comment and comment_options operations are allowed.');
-  }
   const envelope = await loadEnvelope();
   if (!envelope) throw new Error('No enrolled account.');
+  if (envelope.stale) {
+    respond(msg.id, {
+      ok: false,
+      reauth_required: true,
+      vault_retained: true,
+      message: envelope.staleReason || ROTATION_MISMATCH_MSG,
+    });
+    return;
+  }
+
+  let ops;
+  try {
+    ops = validateOps(msg.ops, envelope.username);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : 'Only comment and comment_options operations are allowed.');
+  }
 
   try {
     const wif = await decryptWif(envelope, msg.passphraseConfirm);
@@ -263,17 +301,25 @@ async function handleSignBroadcast(msg: Extract<WorkerRequest, { type: 'signBroa
     throw new Error('API nodes disagree on your key status — publish blocked for safety.');
   }
   if (rot === 'mismatch') {
-    await wipeEnvelope();
+    await markEnvelopeStale(ROTATION_MISMATCH_MSG);
     unlockedWif = null;
     unlockedUsername = null;
-    respond(msg.id, { ok: false, reauth_required: true, message: 'Posting key rotated on-chain. Re-enroll.' });
+    respond(msg.id, {
+      ok: false,
+      reauth_required: true,
+      vault_retained: true,
+      message: ROTATION_MISMATCH_MSG,
+    });
     return;
   }
   if (rot === 'fail') throw new Error('Could not verify key rotation status.');
 
   const c = client();
   const priv = PrivateKey.fromString(unlockedWif!);
-  const result = await c.broadcast.sendOperations(msg.ops as Parameters<Client['broadcast']['sendOperations']>[0], priv);
+  const result = await c.broadcast.sendOperations(
+    ops as Parameters<Client['broadcast']['sendOperations']>[0],
+    priv,
+  );
   respond(msg.id, { ok: true, txId: result.id });
 }
 
@@ -313,6 +359,7 @@ export function __resetWorkerStateForTests(): void {
   gestureTokenValid = null;
   testMessageSink = null;
   clientFactory = () => new Client(NODES, { timeout: 8_000 }) as unknown as HiveClient;
+  getAccountsFromNode = defaultGetAccountsFromNode;
 }
 
 export function __setMessageSinkForTests(sink: MessageSink | null): void {
@@ -346,6 +393,7 @@ export async function handleWorkerMessage(msg: WorkerInbound): Promise<void> {
           unlocked: !!unlockedWif,
           username: envelope?.username ?? null,
           postingPubkey: envelope?.postingPubkey ?? null,
+          stale: !!envelope?.stale,
         });
         break;
       }

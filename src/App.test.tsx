@@ -48,6 +48,7 @@ describe('App', () => {
       unlocked: false,
       username: null,
       postingPubkey: null,
+      stale: false,
     });
     vi.mocked(signingClient.setIdleTimeoutMin).mockClear();
   });

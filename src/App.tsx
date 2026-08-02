@@ -64,6 +64,7 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [postingPubkey, setPostingPubkey] = useState<string | null>(null);
+  const [vaultStale, setVaultStale] = useState(false);
   const navigate = useNavigate();
 
   const refreshStatus = useCallback(async () => {
@@ -72,6 +73,7 @@ export default function App() {
     setUnlocked(s.unlocked);
     setUsername(s.username);
     setPostingPubkey(s.postingPubkey);
+    setVaultStale(s.stale);
   }, []);
 
   const refreshDrafts = useCallback(async () => {
@@ -176,6 +178,7 @@ export default function App() {
               enrolled={enrolled}
               username={username}
               postingPubkey={postingPubkey}
+              vaultStale={vaultStale}
               onStatusChange={() => void refreshStatus()}
             />
           }

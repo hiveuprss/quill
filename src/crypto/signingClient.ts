@@ -5,6 +5,7 @@ type Status = {
   unlocked: boolean;
   username: string | null;
   postingPubkey: string | null;
+  stale: boolean;
 };
 
 type Pending = {
@@ -67,6 +68,7 @@ class SigningClient {
       unlocked: !!res.unlocked,
       username: (res.username as string) ?? null,
       postingPubkey: (res.postingPubkey as string) ?? null,
+      stale: !!res.stale,
     };
   }
 
