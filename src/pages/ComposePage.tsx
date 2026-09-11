@@ -7,7 +7,8 @@ import { UnlockModal } from '../components/UnlockModal';
 import type { Draft } from '../db/draftsDb';
 import { saveDraft, slugifyPermlink } from '../db/draftsDb';
 import { setPreviewMarkdown, clearPreview } from '../markdown/previewFrame';
-import { signingClient } from '../crypto/signingClient';
+import { armUploadGesture, signUploadChallenge } from '../crypto/authSession';
+import type { AuthMethod } from '../crypto/authSession';
 import { uploadSignedImage, isAllowedImageUrl } from '../hive/upload';
 import { listMedia, rememberMedia } from '../db/mediaDb';
 import type { ConnState } from '../components/ConnectivityPill';
@@ -21,6 +22,7 @@ type Props = {
   unlocked: boolean;
   username: string | null;
   postingPubkey: string | null;
+  authMethod?: AuthMethod;
   conn: ConnState;
   onDraftSaved: (d: Draft) => void;
   onStatusChange: () => void | Promise<void>;
@@ -32,6 +34,7 @@ export function ComposePage({
   unlocked,
   username,
   postingPubkey,
+  authMethod = 'none',
   conn,
   onDraftSaved,
   onStatusChange,
@@ -106,7 +109,7 @@ export function ComposePage({
   );
 
   function ensureUnlocked(): Promise<void> {
-    if (unlockedRef.current) return Promise.resolve();
+    if (authMethod === 'keychain' || unlockedRef.current) return Promise.resolve();
     return new Promise((resolve, reject) => {
       unlockWaiter.current = { resolve, reject };
       setUnlockOpen(true);
@@ -137,9 +140,9 @@ export function ComposePage({
       throw new Error(t('compose.errUploadNeedEnroll'));
     }
     await ensureUnlocked();
-    const token = await signingClient.armUploadGesture();
+    const token = await armUploadGesture();
     const buf = await file.arrayBuffer();
-    const signed = await signingClient.signUploadChallenge(buf, token);
+    const signed = await signUploadChallenge(buf, token);
     const url = await uploadSignedImage(
       String(signed.username),
       String(signed.signature),
@@ -209,6 +212,7 @@ export function ComposePage({
         unlocked={unlocked}
         username={username}
         postingPubkey={postingPubkey}
+        authMethod={authMethod}
         onUpdateDraft={(p) => patch(p)}
         onNeedEnroll={() => navigate('/auth')}
         onCancel={() => setMode('write')}
@@ -335,7 +339,7 @@ export function ComposePage({
       )}
 
       <UnlockModal
-        open={unlockOpen}
+        open={unlockOpen && authMethod !== 'keychain'}
         reason={t('compose.unlockForUpload')}
         onCancel={cancelUnlock}
         onUnlocked={() => finishUnlock()}

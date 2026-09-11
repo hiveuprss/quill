@@ -21,10 +21,8 @@ vi.mock('../hive/account', () => ({
   verifyRotation: (...a: unknown[]) => verifyRotation(...a),
 }));
 
-vi.mock('../crypto/signingClient', () => ({
-  signingClient: {
-    signBroadcast: (...a: unknown[]) => signBroadcast(...a),
-  },
+vi.mock('../crypto/authSession', () => ({
+  signBroadcast: (...a: unknown[]) => signBroadcast(...a),
 }));
 
 function draft(partial: Partial<Draft> = {}): Draft {
@@ -93,6 +91,21 @@ describe('PublishSheet', () => {
     await user.click(screen.getByRole('button', { name: /Confirm publish/i }));
     await waitFor(() => expect(onPublished).toHaveBeenCalled());
     expect(screen.getByText(/Published/i)).toBeInTheDocument();
+  });
+
+  it('publishes via Hive Keychain without passphrase', async () => {
+    const user = userEvent.setup();
+    const onPublished = vi.fn();
+    render(
+      <PublishSheet {...baseProps} authMethod="keychain" onPublished={onPublished} />,
+    );
+    await user.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Approve in Keychain/i }));
+    expect(screen.queryByLabelText(/Passphrase/i)).not.toBeInTheDocument();
+    expect(verifyRotation).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /Approve in Keychain/i }));
+    await waitFor(() => expect(onPublished).toHaveBeenCalled());
+    expect(signBroadcast).toHaveBeenCalled();
   });
 
   it('republishes edited_locally draft as comment-only update', async () => {

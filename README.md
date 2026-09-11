@@ -5,6 +5,7 @@ Distraction-free Hive blog composition PWA (repo: hivequill).
 - Offline drafts (IndexedDB)
 - PeakD/Ecency-portable Markdown preview (sandboxed; static video cards)
 - Passphrase-encrypted posting key in a signing Web Worker
+- Optional Hive Keychain signing (no local private key storage)
 - Publish via `comment` + `comment_options` only
 
 ## Develop (Docker only)

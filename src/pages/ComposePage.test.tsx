@@ -46,10 +46,13 @@ vi.mock('../editor/ComposeEditor', () => ({
   ),
 }));
 
+vi.mock('../crypto/authSession', () => ({
+  armUploadGesture: (...a: unknown[]) => armUploadGesture(...a),
+  signUploadChallenge: (...a: unknown[]) => signUploadChallenge(...a),
+}));
+
 vi.mock('../crypto/signingClient', () => ({
   signingClient: {
-    armUploadGesture: (...a: unknown[]) => armUploadGesture(...a),
-    signUploadChallenge: (...a: unknown[]) => signUploadChallenge(...a),
     unlock: (...a: unknown[]) => unlockVault(...a),
   },
 }));

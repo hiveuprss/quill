@@ -14,7 +14,8 @@ import {
   saveDraft,
   type Draft,
 } from './db/draftsDb';
-import { signingClient } from './crypto/signingClient';
+import { getAuthStatus, setIdleTimeoutMin } from './crypto/authSession';
+import type { AuthMethod } from './crypto/authSession';
 import { getSettings } from './db/draftsDb';
 import { publicAssetUrl } from './seo/siteUrl';
 
@@ -23,6 +24,7 @@ function ComposeRoute(props: {
   unlocked: boolean;
   username: string | null;
   postingPubkey: string | null;
+  authMethod: AuthMethod;
   conn: ReturnType<typeof useConnectivity>;
   onDraftSaved: (d: Draft) => void;
   onStatusChange: () => void | Promise<void>;
@@ -65,15 +67,17 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(null);
   const [postingPubkey, setPostingPubkey] = useState<string | null>(null);
   const [vaultStale, setVaultStale] = useState(false);
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('none');
   const navigate = useNavigate();
 
   const refreshStatus = useCallback(async () => {
-    const s = await signingClient.getStatus();
+    const s = await getAuthStatus();
     setEnrolled(s.enrolled);
     setUnlocked(s.unlocked);
     setUsername(s.username);
     setPostingPubkey(s.postingPubkey);
     setVaultStale(s.stale);
+    setAuthMethod(s.method);
   }, []);
 
   const refreshDrafts = useCallback(async () => {
@@ -83,7 +87,7 @@ export default function App() {
   useEffect(() => {
     void refreshDrafts();
     void refreshStatus();
-    void getSettings().then((s) => signingClient.setIdleTimeoutMin(s.idleTimeoutMin));
+    void getSettings().then((s) => setIdleTimeoutMin(s.idleTimeoutMin));
   }, [refreshDrafts, refreshStatus]);
 
   async function createDraft() {
@@ -154,6 +158,7 @@ export default function App() {
               unlocked={unlocked}
               username={username}
               postingPubkey={postingPubkey}
+              authMethod={authMethod}
               conn={conn}
               onDraftSaved={() => void refreshDrafts()}
               onStatusChange={() => void refreshStatus()}
@@ -179,6 +184,7 @@ export default function App() {
               username={username}
               postingPubkey={postingPubkey}
               vaultStale={vaultStale}
+              authMethod={authMethod}
               onStatusChange={() => void refreshStatus()}
             />
           }

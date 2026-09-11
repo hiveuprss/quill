@@ -1,11 +1,13 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { signingClient } from '../crypto/signingClient';
+import { connectKeychain, enrollLocal } from '../crypto/authSession';
+import { isKeychainAvailable } from '../hive/keychain';
 import { lookupAccount } from '../hive/account';
 import { localizeError } from '../i18n/mapError';
 
-type Step = 'user' | 'looking' | 'key' | 'pass' | 'enrolling';
+type Method = 'choose' | 'local' | 'keychain';
+type Step = 'user' | 'looking' | 'key' | 'pass' | 'enrolling' | 'connecting';
 
 function passphraseScore(pw: string): number {
   let s = 0;
@@ -25,6 +27,7 @@ export function AuthPage({
   enrolled?: boolean;
 }) {
   const { t } = useTranslation();
+  const [method, setMethod] = useState<Method>('choose');
   const [username, setUsername] = useState('');
   const [wif, setWif] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -34,9 +37,16 @@ export function AuthPage({
   const [dualMsg, setDualMsg] = useState<string | null>(null);
   const [acceptDual, setAcceptDual] = useState(false);
   const lookupGen = useRef(0);
+  const keychainReady = isKeychainAvailable();
 
   const score = passphraseScore(passphrase);
-  const busy = step === 'looking' || step === 'enrolling';
+  const busy = step === 'looking' || step === 'enrolling' || step === 'connecting';
+
+  function pickMethod(next: Method) {
+    setError(null);
+    setMethod(next);
+    setStep('user');
+  }
 
   async function lookup(e: FormEvent) {
     e.preventDefault();
@@ -52,6 +62,13 @@ export function AuthPage({
       const account = await lookupAccount(name);
       if (gen !== lookupGen.current) return;
       if (!account) throw new Error(t('auth.errAccountNotFound'));
+      if (method === 'keychain') {
+        setStep('connecting');
+        await connectKeychain(name);
+        if (gen !== lookupGen.current) return;
+        onDone();
+        return;
+      }
       setStep('key');
     } catch (err) {
       if (gen !== lookupGen.current) return;
@@ -96,7 +113,7 @@ export function AuthPage({
     const wifValue = wif;
     const passValue = passphrase;
     try {
-      const res = await signingClient.enroll({
+      const res = await enrollLocal({
         username: username.trim().toLowerCase(),
         wif: wifValue,
         passphrase: passValue,
@@ -134,10 +151,45 @@ export function AuthPage({
     );
   }
 
+  if (method === 'choose') {
+    return (
+      <div className="page">
+        <h1 className="page-title">{t('auth.title')}</h1>
+        <p className="muted">{t('auth.introChoose')}</p>
+        {error && (
+          <div className="banner danger" role="alert">
+            {error}
+          </div>
+        )}
+        <div className="form-stack">
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => pickMethod('keychain')}
+            disabled={!keychainReady}
+            title={!keychainReady ? t('auth.keychainMissingHint') : undefined}
+          >
+            {t('auth.methodKeychain')}
+          </button>
+          {!keychainReady && (
+            <p className="muted">{t('auth.keychainMissingHint')}</p>
+          )}
+          <button type="button" className="btn" onClick={() => pickMethod('local')}>
+            {t('auth.methodLocal')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
-      <h1 className="page-title">{t('auth.title')}</h1>
-      <p className="muted">{t('auth.intro')}</p>
+      <h1 className="page-title">
+        {method === 'keychain' ? t('auth.titleKeychain') : t('auth.title')}
+      </h1>
+      <p className="muted">
+        {method === 'keychain' ? t('auth.introKeychain') : t('auth.intro')}
+      </p>
 
       {error && (
         <div className="banner danger" role="alert">
@@ -162,7 +214,7 @@ export function AuthPage({
         </div>
       )}
 
-      {(step === 'user' || step === 'looking') && (
+      {(step === 'user' || step === 'looking' || step === 'connecting') && (
         <form className="form-stack" onSubmit={(e) => void lookup(e)}>
           <label>
             {t('auth.username')}
@@ -175,8 +227,22 @@ export function AuthPage({
             />
           </label>
           <div className="row-actions" style={{ marginTop: 0 }}>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={() => pickMethod('choose')}
+            >
+              {t('auth.back')}
+            </button>
             <button type="submit" className="btn primary" disabled={busy}>
-              {step === 'looking' ? t('auth.lookingUp') : t('auth.continue')}
+              {step === 'looking'
+                ? t('auth.lookingUp')
+                : step === 'connecting'
+                  ? t('auth.connectingKeychain')
+                  : method === 'keychain'
+                    ? t('auth.connectKeychain')
+                    : t('auth.continue')}
             </button>
             {step === 'looking' && (
               <button type="button" className="btn" onClick={cancelLookup}>
@@ -187,7 +253,7 @@ export function AuthPage({
         </form>
       )}
 
-      {step === 'key' && (
+      {method === 'local' && step === 'key' && (
         <form className="form-stack" onSubmit={toPass}>
           <p className="muted">
             {t('auth.accountFound', { username: username.trim().toLowerCase() })}
@@ -213,7 +279,7 @@ export function AuthPage({
         </form>
       )}
 
-      {(step === 'pass' || step === 'enrolling') && (
+      {method === 'local' && (step === 'pass' || step === 'enrolling') && (
         <form className="form-stack" onSubmit={(e) => void enroll(e)}>
           <label>
             {t('auth.passphrase')}

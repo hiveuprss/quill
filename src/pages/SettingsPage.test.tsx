@@ -8,16 +8,16 @@ import { SettingsPage } from './SettingsPage';
 
 const unlock = vi.fn().mockResolvedValue({});
 const lock = vi.fn().mockResolvedValue({});
-const wipe = vi.fn().mockResolvedValue({});
+const wipeLocal = vi.fn().mockResolvedValue({});
+const disconnectKeychain = vi.fn().mockResolvedValue(undefined);
 const setIdleTimeoutMin = vi.fn();
 
-vi.mock('../crypto/signingClient', () => ({
-  signingClient: {
-    unlock: (...a: unknown[]) => unlock(...a),
-    lock: (...a: unknown[]) => lock(...a),
-    wipe: (...a: unknown[]) => wipe(...a),
-    setIdleTimeoutMin: (...a: unknown[]) => setIdleTimeoutMin(...a),
-  },
+vi.mock('../crypto/authSession', () => ({
+  unlock: (...a: unknown[]) => unlock(...a),
+  lock: (...a: unknown[]) => lock(...a),
+  wipeLocal: (...a: unknown[]) => wipeLocal(...a),
+  disconnectKeychain: (...a: unknown[]) => disconnectKeychain(...a),
+  setIdleTimeoutMin: (...a: unknown[]) => setIdleTimeoutMin(...a),
 }));
 
 describe('SettingsPage', () => {
@@ -26,7 +26,8 @@ describe('SettingsPage', () => {
     applyTheme('light');
     unlock.mockReset().mockResolvedValue({});
     lock.mockReset().mockResolvedValue({});
-    wipe.mockReset().mockResolvedValue({});
+    wipeLocal.mockReset().mockResolvedValue({});
+    disconnectKeychain.mockReset().mockResolvedValue(undefined);
   });
 
   it('shows not enrolled message', async () => {
@@ -54,6 +55,7 @@ describe('SettingsPage', () => {
     render(
       <SettingsPage
         enrolled
+        authMethod="local"
         username="alice"
         postingPubkey="STM1"
         onStatusChange={onStatusChange}
@@ -77,7 +79,29 @@ describe('SettingsPage', () => {
 
     await user.type(screen.getByLabelText(/Wipe stored key/i), '@alice');
     await user.click(screen.getByRole('button', { name: /Wipe envelope/i }));
-    await waitFor(() => expect(wipe).toHaveBeenCalled());
+    await waitFor(() => expect(wipeLocal).toHaveBeenCalled());
+    expect(onStatusChange).toHaveBeenCalled();
+  });
+
+  it('disconnects Keychain without unlock UI', async () => {
+    const user = userEvent.setup();
+    const onStatusChange = vi.fn();
+    render(
+      <SettingsPage
+        enrolled
+        authMethod="keychain"
+        username="alice"
+        postingPubkey={null}
+        onStatusChange={onStatusChange}
+      />,
+    );
+    await waitFor(() => screen.getByText(/Connected as/i));
+    expect(screen.queryByLabelText(/Unlock passphrase/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Auto-lock after/i)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Disconnect Keychain/i), 'alice');
+    await user.click(screen.getByRole('button', { name: /Disconnect Keychain/i }));
+    await waitFor(() => expect(disconnectKeychain).toHaveBeenCalled());
+    expect(wipeLocal).not.toHaveBeenCalled();
     expect(onStatusChange).toHaveBeenCalled();
   });
 
@@ -86,6 +110,7 @@ describe('SettingsPage', () => {
     render(
       <SettingsPage
         enrolled
+        authMethod="local"
         username="alice"
         postingPubkey="STM1"
         onStatusChange={vi.fn()}
@@ -97,7 +122,7 @@ describe('SettingsPage', () => {
     await waitFor(() =>
       expect(screen.getByText(/exact username/i)).toBeInTheDocument(),
     );
-    expect(wipe).not.toHaveBeenCalled();
+    expect(wipeLocal).not.toHaveBeenCalled();
   });
 
   it('switches theme immediately and persists', async () => {
