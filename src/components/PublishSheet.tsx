@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import type { Draft } from '../db/draftsDb';
 import { slugifyPermlink } from '../db/draftsDb';
 import { buildRootPostOps, peakdUrl } from '../hive/ops';
-import { signingClient } from '../crypto/signingClient';
+import { signBroadcast } from '../crypto/authSession';
+import type { AuthMethod } from '../crypto/authSession';
 import { pingHive } from '../hive/client';
 import { verifyRotation } from '../hive/account';
 import { localizeError } from '../i18n/mapError';
@@ -14,6 +15,7 @@ type Phase =
   | 'idle'
   | 'preflight'
   | 'passphrase'
+  | 'keychain_confirm'
   | 'broadcasting'
   | 'success'
   | 'error';
@@ -25,6 +27,7 @@ type Props = {
   unlocked: boolean;
   username: string | null;
   postingPubkey: string | null;
+  authMethod?: AuthMethod;
   onUpdateDraft: (patch: Partial<Draft>) => void;
   onNeedEnroll: () => void;
   onPublished: (draft: Draft, url: string) => void;
@@ -38,6 +41,7 @@ export function PublishSheet({
   unlocked,
   username,
   postingPubkey,
+  authMethod = 'local',
   onUpdateDraft,
   onNeedEnroll,
   onPublished,
@@ -53,6 +57,7 @@ export function PublishSheet({
 
   const permlink = draft.permlink || slugifyPermlink(draft.title || 'untitled');
   const tags = draft.tags.length ? draft.tags : ['blog'];
+  const useKeychain = authMethod === 'keychain';
 
   const dryRun = useMemo(() => {
     const none = t('publish.dryNone');
@@ -131,7 +136,7 @@ export function PublishSheet({
       setError(t('publish.errRpc'));
       return;
     }
-    if (username && postingPubkey) {
+    if (!useKeychain && username && postingPubkey) {
       const rot = await verifyRotation(username, postingPubkey);
       if (rot === 'disagree') {
         setPhase('error');
@@ -144,14 +149,14 @@ export function PublishSheet({
         return;
       }
     }
-    if (!unlocked) {
+    if (!useKeychain && !unlocked) {
       setWarn(t('publish.warnLocked'));
     }
-    setPhase('passphrase');
+    setPhase(useKeychain ? 'keychain_confirm' : 'passphrase');
   }
 
   async function confirmPublish() {
-    if (phase !== 'passphrase') return;
+    if (phase !== 'passphrase' && phase !== 'keychain_confirm') return;
     if (!username) {
       setError(t('publish.errNotEnrolled'));
       return;
@@ -174,7 +179,7 @@ export function PublishSheet({
         coverImageUrl: draft.coverImageUrl,
         isUpdate,
       });
-      const res = await signingClient.signBroadcast(ops, passphrase);
+      const res = await signBroadcast(ops, passphrase);
       if (res.reauth_required) {
         setPhase('error');
         setError(
@@ -207,6 +212,8 @@ export function PublishSheet({
       setPassphrase('');
     }
   }
+
+  const awaitingConfirm = phase === 'passphrase' || phase === 'keychain_confirm';
 
   return (
     <div className="page">
@@ -304,6 +311,12 @@ export function PublishSheet({
         </label>
       )}
 
+      {phase === 'keychain_confirm' && (
+        <div className="banner info" role="status">
+          {t('publish.keychainConfirm')}
+        </div>
+      )}
+
       {phase === 'success' && successUrl && (
         <div className="banner info" role="status">
           {t('publish.published')}
@@ -323,7 +336,7 @@ export function PublishSheet({
         >
           {phase === 'success' ? t('publish.done') : t('publish.cancel')}
         </button>
-        {phase !== 'passphrase' && phase !== 'success' && phase !== 'broadcasting' && (
+        {!awaitingConfirm && phase !== 'success' && phase !== 'broadcasting' && (
           <button
             type="button"
             className="btn primary"
@@ -343,9 +356,18 @@ export function PublishSheet({
             {t('publish.confirm')}
           </button>
         )}
+        {phase === 'keychain_confirm' && (
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => void confirmPublish()}
+          >
+            {t('publish.confirmKeychain')}
+          </button>
+        )}
         {phase === 'broadcasting' && (
           <button type="button" className="btn primary" disabled>
-            {t('publish.broadcasting')}
+            {useKeychain ? t('publish.awaitingKeychain') : t('publish.broadcasting')}
           </button>
         )}
       </div>

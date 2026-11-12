@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import App from './App';
-import { signingClient } from './crypto/signingClient';
 import type { Draft } from './db/draftsDb';
 
 const listDrafts = vi.fn();
@@ -11,7 +10,8 @@ const saveDraft = vi.fn();
 const getDraft = vi.fn();
 const deleteDraft = vi.fn();
 const getSettings = vi.fn();
-const getStatus = vi.fn();
+const getAuthStatus = vi.fn();
+const setIdleTimeoutMin = vi.fn();
 
 vi.mock('./db/draftsDb', async () => {
   const actual = await vi.importActual<typeof import('./db/draftsDb')>('./db/draftsDb');
@@ -25,11 +25,9 @@ vi.mock('./db/draftsDb', async () => {
   };
 });
 
-vi.mock('./crypto/signingClient', () => ({
-  signingClient: {
-    getStatus: (...a: unknown[]) => getStatus(...a),
-    setIdleTimeoutMin: vi.fn(),
-  },
+vi.mock('./crypto/authSession', () => ({
+  getAuthStatus: (...a: unknown[]) => getAuthStatus(...a),
+  setIdleTimeoutMin: (...a: unknown[]) => setIdleTimeoutMin(...a),
 }));
 
 vi.mock('./components/ConnectivityPill', () => ({
@@ -43,14 +41,16 @@ describe('App', () => {
     saveDraft.mockImplementation(async (d: Draft) => d);
     getDraft.mockResolvedValue(null);
     getSettings.mockResolvedValue({ key: 'app', idleTimeoutMin: 10 });
-    getStatus.mockResolvedValue({
+    getAuthStatus.mockResolvedValue({
+      method: 'none',
       enrolled: false,
       unlocked: false,
       username: null,
       postingPubkey: null,
       stale: false,
+      keychainAvailable: false,
     });
-    vi.mocked(signingClient.setIdleTimeoutMin).mockClear();
+    setIdleTimeoutMin.mockClear();
   });
 
   it('creates a draft from empty state', async () => {

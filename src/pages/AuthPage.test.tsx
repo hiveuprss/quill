@@ -5,28 +5,52 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { AuthPage } from './AuthPage';
 
 const lookupAccount = vi.fn();
-const enroll = vi.fn();
+const enrollLocal = vi.fn();
+const connectKeychain = vi.fn();
+const isKeychainAvailable = vi.fn(() => false);
 
 vi.mock('../hive/account', () => ({
   lookupAccount: (...args: unknown[]) => lookupAccount(...args),
 }));
 
-vi.mock('../crypto/signingClient', () => ({
-  signingClient: {
-    enroll: (...args: unknown[]) => enroll(...args),
-  },
+vi.mock('../crypto/authSession', () => ({
+  enrollLocal: (...args: unknown[]) => enrollLocal(...args),
+  connectKeychain: (...args: unknown[]) => connectKeychain(...args),
+}));
+
+vi.mock('../hive/keychain', () => ({
+  isKeychainAvailable: () => isKeychainAvailable(),
 }));
 
 describe('AuthPage', () => {
   beforeEach(() => {
     lookupAccount.mockReset();
-    enroll.mockReset();
+    enrollLocal.mockReset();
+    connectKeychain.mockReset();
+    isKeychainAvailable.mockReset().mockReturnValue(false);
+  });
+
+  async function chooseLocal(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /Store posting key/i }));
+  }
+
+  it('offers Keychain and local methods', () => {
+    isKeychainAvailable.mockReturnValue(true);
+    render(<AuthPage onDone={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Use Hive Keychain/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Store posting key/i })).toBeInTheDocument();
+  });
+
+  it('disables Keychain when extension missing', () => {
+    render(<AuthPage onDone={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Use Hive Keychain/i })).toBeDisabled();
   });
 
   it('looks up username then asks for WIF', async () => {
     const user = userEvent.setup();
     lookupAccount.mockResolvedValue({ name: 'alice' });
     render(<AuthPage onDone={vi.fn()} />);
+    await chooseLocal(user);
     await user.type(screen.getByLabelText(/Hive username/i), 'alice');
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => expect(screen.getByText(/found\. Paste the posting/i)).toBeInTheDocument());
@@ -37,6 +61,7 @@ describe('AuthPage', () => {
     const user = userEvent.setup();
     lookupAccount.mockResolvedValue(null);
     render(<AuthPage onDone={vi.fn()} />);
+    await chooseLocal(user);
     await user.type(screen.getByLabelText(/Hive username/i), 'nobody');
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => expect(screen.getByText(/Account not found/i)).toBeInTheDocument());
@@ -52,6 +77,7 @@ describe('AuthPage', () => {
         }),
     );
     render(<AuthPage onDone={vi.fn()} />);
+    await chooseLocal(user);
     await user.type(screen.getByLabelText(/Hive username/i), 'alice');
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
     expect(screen.getByRole('button', { name: /Looking up/i })).toBeDisabled();
@@ -67,8 +93,9 @@ describe('AuthPage', () => {
     const user = userEvent.setup();
     const onDone = vi.fn();
     lookupAccount.mockResolvedValue({ name: 'alice' });
-    enroll.mockResolvedValue({ ok: true });
+    enrollLocal.mockResolvedValue({ ok: true });
     render(<AuthPage onDone={onDone} />);
+    await chooseLocal(user);
     await user.type(screen.getByLabelText(/Hive username/i), 'alice');
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => screen.getByLabelText(/Posting private key/i));
@@ -83,11 +110,12 @@ describe('AuthPage', () => {
   it('surfaces dual-authority confirm', async () => {
     const user = userEvent.setup();
     lookupAccount.mockResolvedValue({ name: 'alice' });
-    enroll.mockResolvedValue({
+    enrollLocal.mockResolvedValue({
       needsDualConfirm: true,
       message: 'Dual key warning',
     });
     render(<AuthPage onDone={vi.fn()} />);
+    await chooseLocal(user);
     await user.type(screen.getByLabelText(/Hive username/i), 'alice');
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => screen.getByLabelText(/Posting private key/i));
@@ -97,6 +125,21 @@ describe('AuthPage', () => {
     await user.type(screen.getByLabelText(/Confirm passphrase/i), 'GoodPassphrase1!');
     await user.click(screen.getByRole('button', { name: /Encrypt/i }));
     await waitFor(() => expect(screen.getByText(/Dual key warning/i)).toBeInTheDocument());
+  });
+
+  it('connects via Hive Keychain without asking for WIF', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    isKeychainAvailable.mockReturnValue(true);
+    lookupAccount.mockResolvedValue({ name: 'alice' });
+    connectKeychain.mockResolvedValue({ method: 'keychain', enrolled: true });
+    render(<AuthPage onDone={onDone} />);
+    await user.click(screen.getByRole('button', { name: /Use Hive Keychain/i }));
+    await user.type(screen.getByLabelText(/Hive username/i), 'alice');
+    await user.click(screen.getByRole('button', { name: /Connect with Keychain/i }));
+    await waitFor(() => expect(connectKeychain).toHaveBeenCalledWith('alice'));
+    expect(onDone).toHaveBeenCalled();
+    expect(enrollLocal).not.toHaveBeenCalled();
   });
 
   it('blocks enroll UI when already enrolled', () => {

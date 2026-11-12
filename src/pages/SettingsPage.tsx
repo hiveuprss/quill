@@ -1,7 +1,14 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSettings, saveSettings, type AppSettings } from '../db/draftsDb';
-import { signingClient } from '../crypto/signingClient';
+import {
+  disconnectKeychain,
+  lock,
+  setIdleTimeoutMin,
+  unlock,
+  wipeLocal,
+} from '../crypto/authSession';
+import type { AuthMethod } from '../crypto/authSession';
 import { applyLocalePreference } from '../i18n/I18nProvider';
 import { localizeError } from '../i18n/mapError';
 import { applyTheme, type ThemeId } from '../theme/applyTheme';
@@ -16,12 +23,14 @@ export function SettingsPage({
   username,
   postingPubkey,
   vaultStale = false,
+  authMethod = 'none',
   onStatusChange,
 }: {
   enrolled: boolean;
   username: string | null;
   postingPubkey: string | null;
   vaultStale?: boolean;
+  authMethod?: AuthMethod;
   onStatusChange: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -32,6 +41,7 @@ export function SettingsPage({
   const [passphrase, setPassphrase] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const isKeychain = authMethod === 'keychain';
 
   useEffect(() => {
     void getSettings().then((s) => {
@@ -39,7 +49,7 @@ export function SettingsPage({
       setLocale(s.locale);
       setTheme(s.theme);
       applyTheme(s.theme);
-      signingClient.setIdleTimeoutMin(s.idleTimeoutMin);
+      setIdleTimeoutMin(s.idleTimeoutMin);
     });
   }, []);
 
@@ -49,7 +59,7 @@ export function SettingsPage({
     try {
       const current = await getSettings();
       await saveSettings({ ...current, idleTimeoutMin: idle });
-      signingClient.setIdleTimeoutMin(idle);
+      setIdleTimeoutMin(idle);
       setMsg(t('settings.msgIdleSaved'));
     } catch (error) {
       setErr(localizeError(error instanceof Error ? error.message : String(error), t));
@@ -86,11 +96,11 @@ export function SettingsPage({
     }
   }
 
-  async function unlock(e: FormEvent) {
+  async function onUnlock(e: FormEvent) {
     e.preventDefault();
     setErr(null);
     try {
-      await signingClient.unlock(passphrase);
+      await unlock(passphrase);
       setPassphrase('');
       setMsg(t('settings.msgUnlocked'));
       onStatusChange();
@@ -99,8 +109,8 @@ export function SettingsPage({
     }
   }
 
-  async function lock() {
-    await signingClient.lock();
+  async function onLock() {
+    await lock();
     setMsg(t('settings.msgLocked'));
     onStatusChange();
   }
@@ -112,9 +122,15 @@ export function SettingsPage({
       setErr(t('settings.errWipeConfirm'));
       return;
     }
-    await signingClient.wipe();
-    setWipeName('');
-    setMsg(t('settings.msgWiped'));
+    if (isKeychain) {
+      await disconnectKeychain();
+      setWipeName('');
+      setMsg(t('settings.msgKeychainDisconnected'));
+    } else {
+      await wipeLocal();
+      setWipeName('');
+      setMsg(t('settings.msgWiped'));
+    }
     onStatusChange();
   }
 
@@ -170,48 +186,57 @@ export function SettingsPage({
       </section>
 
       <section className="settings-section">
-        <h2>{t('settings.vault')}</h2>
+        <h2>{isKeychain ? t('settings.keychain') : t('settings.vault')}</h2>
         {enrolled ? (
           <>
-            {vaultStale ? (
+            {!isKeychain && vaultStale ? (
               <div className="banner danger" role="alert">
                 {t('settings.vaultStale')}
               </div>
             ) : null}
             <p className="settings-meta">
-              {t('settings.enrolledAs', { username })}
-              {postingPubkey ? (
+              {isKeychain
+                ? t('settings.connectedAs', { username })
+                : t('settings.enrolledAs', { username })}
+              {!isKeychain && postingPubkey ? (
                 <span className="settings-pubkey">
                   {t('settings.postingPubkey', { pubkey: postingPubkey })}
                 </span>
               ) : null}
+              {isKeychain ? (
+                <span className="settings-pubkey">{t('settings.methodKeychain')}</span>
+              ) : null}
             </p>
-            <form className="settings-stack" onSubmit={(e) => void unlock(e)}>
-              <label>
-                {t('settings.unlockPassphrase')}
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={passphrase}
-                  onChange={(e) => setPassphrase(e.target.value)}
-                />
-              </label>
-              <div className="row-actions">
-                <button type="submit" className="btn primary">
-                  {t('settings.unlock')}
-                </button>
-                <button type="button" className="btn" onClick={() => void lock()}>
-                  {t('settings.lock')}
-                </button>
-              </div>
-            </form>
+            {!isKeychain && (
+              <form className="settings-stack" onSubmit={(e) => void onUnlock(e)}>
+                <label>
+                  {t('settings.unlockPassphrase')}
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={passphrase}
+                    onChange={(e) => setPassphrase(e.target.value)}
+                  />
+                </label>
+                <div className="row-actions">
+                  <button type="submit" className="btn primary">
+                    {t('settings.unlock')}
+                  </button>
+                  <button type="button" className="btn" onClick={() => void onLock()}>
+                    {t('settings.lock')}
+                  </button>
+                </div>
+              </form>
+            )}
             <form className="settings-stack" onSubmit={(e) => void wipe(e)}>
               <label>
-                {t('settings.wipeLabel', { username })}
+                {isKeychain
+                  ? t('settings.disconnectLabel', { username })
+                  : t('settings.wipeLabel', { username })}
                 <input value={wipeName} onChange={(e) => setWipeName(e.target.value)} />
               </label>
               <button type="submit" className="btn danger">
-                {t('settings.wipeButton')}
+                {isKeychain ? t('settings.disconnectButton') : t('settings.wipeButton')}
               </button>
             </form>
           </>
@@ -220,28 +245,32 @@ export function SettingsPage({
         )}
       </section>
 
-      <section className="settings-section">
-        <h2>{t('settings.lockSection')}</h2>
-        <form className="settings-control" onSubmit={(e) => void saveIdle(e)}>
-          <label className="settings-inline-label">
-            {t('settings.idleTimeout')}
-            <select value={idle} onChange={(e) => setIdle(Number(e.target.value))}>
-              {[5, 10, 15].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className="btn">
-            {t('common.save')}
-          </button>
-        </form>
-      </section>
+      {!isKeychain && (
+        <section className="settings-section">
+          <h2>{t('settings.lockSection')}</h2>
+          <form className="settings-control" onSubmit={(e) => void saveIdle(e)}>
+            <label className="settings-inline-label">
+              {t('settings.idleTimeout')}
+              <select value={idle} onChange={(e) => setIdle(Number(e.target.value))}>
+                {[5, 10, 15].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className="btn">
+              {t('common.save')}
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className="settings-section settings-section-last">
         <h2>{t('settings.security')}</h2>
-        <p className="settings-help">{t('settings.securityBody')}</p>
+        <p className="settings-help">
+          {isKeychain ? t('settings.securityBodyKeychain') : t('settings.securityBody')}
+        </p>
       </section>
     </div>
   );

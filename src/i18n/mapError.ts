@@ -35,6 +35,14 @@ export function localizeError(message: string, t: TFunction): string {
     'Upload rate limited — try again later': 'errors.uploadRateLimitedLater',
     'Upload response URL rejected (must be https://images.hive.blog/…)':
       'errors.uploadUrlRejected',
+    'Hive Keychain extension not found.': 'errors.keychainMissing',
+    'Hive Keychain request cancelled.': 'errors.keychainCancelled',
+    'Hive Keychain request failed.': 'errors.keychainFailed',
+    'Hive Keychain returned an empty signature.': 'errors.keychainEmptySignature',
+    'A local posting key is already enrolled. Wipe it in Settings before connecting Keychain.':
+      'errors.keychainLocalConflict',
+    'Hive Keychain is already connected. Disconnect it in Settings before enrolling a local key.':
+      'errors.localKeychainConflict',
   };
 
   const key = exact[msg];

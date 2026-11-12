@@ -24,6 +24,8 @@ export const SettingsSchema = z.object({
   idleTimeoutMin: z.number().min(5).max(15).default(10),
   locale: z.enum(['system', 'en', 'es']).default('system'),
   theme: z.enum(['light', 'dark', 'honey', 'nocturne']).default('light'),
+  /** When set, Quill uses Hive Keychain for this account (no local WIF vault). */
+  keychainUsername: z.string().min(1).optional(),
 });
 
 export type AppSettings = z.infer<typeof SettingsSchema>;
